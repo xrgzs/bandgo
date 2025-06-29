@@ -8,9 +8,12 @@ import (
 	"bandgo/worker"
 )
 
+// Version variable, injected at compile time via -ldflags
+var Version = "dev"
+
 func main() {
 	// Print banner and version
-	println("BandGo - Make your bandwidth GO away! -", config.Version)
+	println("BandGo - Make your bandwidth GO away! -", Version)
 
 	// Parse command line arguments
 	cfg := config.ParseArgs()

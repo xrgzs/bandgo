@@ -7,9 +7,6 @@ import (
 	"strings"
 )
 
-// Version variable, injected at compile time via -ldflags
-var Version = "dev"
-
 // Header represents a HTTP header key-value pair
 type Header struct {
 	Key, Value string
