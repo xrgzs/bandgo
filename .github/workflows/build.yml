@@ -35,7 +35,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --snapshot ${{ github.event_name == 'pull_request' && '--skip=docker' }}
+          args: release --clean --snapshot ${{ github.event_name == 'pull_request' && '--skip=docker' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_OWNER: ${{ github.repository_owner }}
