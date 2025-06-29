@@ -90,7 +90,6 @@ docker_manifests:
       - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:{{ if .IsSnapshot }}{{ .ShortCommit }}{{ else }}latest{{ end }}-arm64"
 
 changelog:
-  sort: asc
   filters:
     exclude:
       - "^docs:"
