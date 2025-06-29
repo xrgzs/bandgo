@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -13,29 +12,18 @@ import (
 	"sync"
 	"time"
 
-	fakeUA "github.com/lib4u/fake-useragent"
-
 	"bandgo/config"
 	"bandgo/utils"
+
+	rand_ua "github.com/xrgzs/rand-ua-go"
 )
-
-var ua *fakeUA.UserAgent
-
-// initFakeUA initialize the fake user agent library
-func initFakeUA() {
-	var err error
-	ua, err = fakeUA.New()
-	if err != nil {
-		log.Fatalf("Failed to initialize fake user agent: %v", err)
-	}
-}
 
 // processHeaders processes and sets headers for the HTTP request
 func processHeaders(req *http.Request, cfg config.Config) {
 	// Set basic headers
-	randUA := ua.GetRandom()
-	// log.Printf("Using User-Agent: %s\n", randUA)
-	req.Header.Add("User-Agent", randUA)
+	ua := rand_ua.MustGetRandomUA()
+	// log.Printf("Using User-Agent: %s\n", ua)
+	req.Header.Add("User-Agent", ua)
 
 	// Set referer if provided
 	if cfg.Referer != "" {
@@ -110,8 +98,6 @@ func createTransport(customIP config.IPArray) *http.Transport {
 
 // StartWorker starts a worker that performs HTTP requests
 func StartWorker(wg *sync.WaitGroup, cfg config.Config) {
-	initFakeUA()
-
 	defer wg.Done()
 	defer func() {
 		if r := recover(); r != nil {
