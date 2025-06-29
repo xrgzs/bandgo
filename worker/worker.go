@@ -34,8 +34,7 @@ func initFakeUA() {
 func processHeaders(req *http.Request, cfg config.Config) {
 	// Set basic headers
 	randUA := ua.GetRandom()
-	log.SetPrefix("[Header] ")
-	log.Printf("Using User-Agent: %s\n", randUA)
+	// log.Printf("Using User-Agent: %s\n", randUA)
 	req.Header.Add("User-Agent", randUA)
 
 	// Set referer if provided
