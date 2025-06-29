@@ -8,7 +8,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,7 +26,7 @@ func initFakeUA() {
 	var err error
 	ua, err = fakeUA.New()
 	if err != nil {
-		os.Exit(1)
+		log.Fatalf("Failed to initialize fake user agent: %v", err)
 	}
 }
 
