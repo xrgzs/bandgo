@@ -31,8 +31,9 @@ builds:
     ldflags:
       - -s -w
       - -X config.Version={{ .Version }}
-    flags:
-      - -trimpath
+    # Disable trimpath to avoid issues with lib4u/fake-useragent
+    # flags:
+    #   - -trimpath
 
 archives:
   - formats: [tar.gz]
