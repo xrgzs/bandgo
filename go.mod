@@ -5,7 +5,7 @@ go 1.24.4
 require (
 	github.com/apoorvam/goterminal v0.0.0-20180523175556-614d345c47e5
 	github.com/shirou/gopsutil v3.21.11+incompatible
-	github.com/xrgzs/rand-ua-go v1.0.8
+	github.com/xrgzs/rand-ua-go v1.0.9
 )
 
 require (
