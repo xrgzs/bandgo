@@ -232,8 +232,8 @@ func (m *tuiModel) workerViewportHeight() int {
 		return 18
 	}
 
-	// Header + summaries + hint lines take around 11 rows.
-	visible := m.height - 11
+	// Header + summaries + hint lines take around 12 rows.
+	visible := m.height - 12
 	if visible < 5 {
 		visible = 5
 	}
