@@ -20,6 +20,9 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
+    ignore:
+      - goos: windows
+        goarch: arm
     goos:
       - linux
       - windows
