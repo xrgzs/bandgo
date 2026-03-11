@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"sync"
 
 	"bandgo/config"
@@ -37,6 +38,7 @@ func main() {
 			if err := monitor.StartTUI(cfg.URL, workers, agg); err != nil {
 				log.Printf("tui exited with error: %v", err)
 			}
+			os.Exit(0)
 		}()
 	}
 

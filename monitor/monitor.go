@@ -210,7 +210,7 @@ func (m tuiModel) View() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\nPress q to quit monitor view.\n")
+	b.WriteString("\nPress q / Ctrl+C to quit.\n")
 	return b.String()
 }
 
