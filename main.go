@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"sync"
 
 	"bandgo/config"
@@ -29,15 +30,22 @@ func main() {
 	}
 
 	// Start network traffic monitor
-	go monitor.MonitorNetworkTraffic(cfg.URL, workers)
+	var agg *monitor.Aggregator
+	if !cfg.NoTUI {
+		agg = monitor.NewAggregator()
+		go func() {
+			if err := monitor.StartTUI(cfg.URL, workers, agg); err != nil {
+				log.Printf("tui exited with error: %v", err)
+			}
+		}()
+	}
 
 	// Start workers
 	var wg sync.WaitGroup
-	for range workers {
+	for i := 1; i <= workers; i++ {
 		wg.Add(1)
-		go worker.StartWorker(&wg, cfg)
+		go worker.StartWorker(&wg, i, cfg, agg)
 	}
 
 	wg.Wait()
-	monitor.Reset()
 }
