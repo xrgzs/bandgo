@@ -9,10 +9,13 @@ import (
 
 	"bandgo/utils"
 
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
-const progressBarWidth = 20
+const progressBarWidth = 24
 
 type WorkerSnapshot struct {
 	ID            int
@@ -147,18 +150,28 @@ type tuiModel struct {
 	target     string
 	agg        *Aggregator
 	concurrent int
+	width      int
+	height     int
+	offset     int
+	progress   progress.Model
+	spinner    spinner.Model
 }
 
 func NewTUIModel(target string, concurrent int, agg *Aggregator) tea.Model {
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
+
 	return tuiModel{
 		target:     target,
 		agg:        agg,
 		concurrent: concurrent,
+		progress:   progress.New(progress.WithDefaultGradient(), progress.WithWidth(progressBarWidth)),
+		spinner:    sp,
 	}
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	return scheduleTick()
+	return tea.Batch(scheduleTick(), m.spinner.Tick)
 }
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -167,24 +180,95 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "q" || msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+
+		workersLen := len(m.agg.Snapshot())
+		pageSize := m.workerViewportHeight()
+		switch msg.String() {
+		case "up", "k":
+			m.offset--
+		case "down", "j":
+			m.offset++
+		case "pgup", "b":
+			m.offset -= pageSize
+		case "pgdown", "f", " ":
+			m.offset += pageSize
+		case "home", "g":
+			m.offset = 0
+		case "end", "G":
+			m.offset = workersLen - pageSize
+		}
+		m.clampOffset(workersLen, pageSize)
 	case tickMsg:
 		m.agg.Tick(time.Second)
+		m.clampOffset(len(m.agg.Snapshot()), m.workerViewportHeight())
 		return m, scheduleTick()
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		barWidth := progressBarWidth
+		if msg.Width > 0 {
+			candidate := msg.Width / 4
+			if candidate < 16 {
+				candidate = 16
+			}
+			if candidate > 40 {
+				candidate = 40
+			}
+			barWidth = candidate
+		}
+		m.progress.Width = barWidth
+		m.clampOffset(len(m.agg.Snapshot()), m.workerViewportHeight())
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	}
 
 	return m, nil
 }
 
+func (m *tuiModel) workerViewportHeight() int {
+	if m.height <= 0 {
+		return 18
+	}
+
+	// Header + summaries + hint lines take around 11 rows.
+	visible := m.height - 11
+	if visible < 5 {
+		visible = 5
+	}
+	return visible
+}
+
+func (m *tuiModel) clampOffset(total, pageSize int) {
+	if total <= pageSize {
+		m.offset = 0
+		return
+	}
+	if m.offset < 0 {
+		m.offset = 0
+	}
+	maxOffset := total - pageSize
+	if m.offset > maxOffset {
+		m.offset = maxOffset
+	}
+}
+
 func (m tuiModel) View() string {
 	var b strings.Builder
-	totalDownloaded, totalSpeed := m.agg.Totals()
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
+	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
+	summaryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
+	workerIDStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("110"))
 
-	b.WriteString("BandGo Worker Monitor\n")
-	b.WriteString(fmt.Sprintf("Target: %s\n", m.target))
-	b.WriteString(fmt.Sprintf("Elapsed: %s\n", m.agg.Elapsed().Round(time.Second)))
-	b.WriteString(fmt.Sprintf("Configured Workers: %d\n\n", m.concurrent))
-	b.WriteString(fmt.Sprintf("Total Speed: %s/s\n", utils.ReadableBytes(totalSpeed)))
-	b.WriteString(fmt.Sprintf("Total Downloaded: %s\n\n", utils.ReadableBytes(float64(totalDownloaded))))
+	b.WriteString(titleStyle.Render("BandGo Worker Monitor"))
+	b.WriteString("\n")
+	b.WriteString(metaStyle.Render(fmt.Sprintf("Target: %s", m.target)))
+	b.WriteString("\n")
+	b.WriteString(metaStyle.Render(fmt.Sprintf("Elapsed: %s", m.agg.Elapsed().Round(time.Second))))
+	b.WriteString("\n")
+	b.WriteString(metaStyle.Render(fmt.Sprintf("Configured Workers: %d", m.concurrent)))
+	b.WriteString("\n\n")
 
 	workers := m.agg.Snapshot()
 	if len(workers) == 0 {
@@ -192,50 +276,59 @@ func (m tuiModel) View() string {
 		return b.String()
 	}
 
-	for _, w := range workers {
-		bar := progressBar(w.Downloaded, w.ContentLength, progressBarWidth)
-		pct := "--"
+	pageSize := m.workerViewportHeight()
+	m.clampOffset(len(workers), pageSize)
+	start := m.offset
+	end := start + pageSize
+	if end > len(workers) {
+		end = len(workers)
+	}
+
+	b.WriteString(metaStyle.Render(fmt.Sprintf("Workers %d-%d/%d (j/k or up/down scroll, PgUp/PgDn page)", start+1, end, len(workers))))
+	b.WriteString("\n")
+
+	for _, w := range workers[start:end] {
+		idLabel := workerIDStyle.Render(fmt.Sprintf("%2d", w.ID))
+		speed := fmt.Sprintf("%s/s", utils.ReadableBytes(w.SpeedBps))
+
 		if w.ContentLength > 0 {
-			p := (float64(w.Downloaded) / float64(w.ContentLength)) * 100
-			if p > 100 {
-				p = 100
+			fraction := float64(w.Downloaded) / float64(w.ContentLength)
+			if fraction > 1 {
+				fraction = 1
 			}
-			pct = fmt.Sprintf("%5.1f%%", p)
+			pct := fmt.Sprintf("%5.1f%%", fraction*100)
+			bar := m.progress.ViewAs(fraction)
+			b.WriteString(fmt.Sprintf("%s | %s %s %s (%s/%s)\n",
+				idLabel,
+				bar,
+				pct,
+				speed,
+				utils.ReadableBytes(float64(w.Downloaded)),
+				utils.ReadableBytes(float64(w.ContentLength)),
+			))
+			continue
 		}
 
-		b.WriteString(fmt.Sprintf("%d: %s %s %s/s", w.ID, bar, pct, utils.ReadableBytes(w.SpeedBps)))
-		if w.ContentLength > 0 {
-			b.WriteString(fmt.Sprintf(" (%s/%s)", utils.ReadableBytes(float64(w.Downloaded)), utils.ReadableBytes(float64(w.ContentLength))))
-		}
-		b.WriteString("\n")
+		// Unknown content-length: use spinner to show this worker is actively downloading.
+		b.WriteString(fmt.Sprintf("%s | %s %s %s downloaded\n",
+			idLabel,
+			m.spinner.View(),
+			speed,
+			utils.ReadableBytes(float64(w.Downloaded)),
+		))
 	}
 
-	b.WriteString("\nPress q / Ctrl+C to quit.\n")
+	b.WriteString("\n")
+
+	totalDownloaded, totalSpeed := m.agg.Totals()
+	b.WriteString(summaryStyle.Render(fmt.Sprintf("Total Speed: %s/s", utils.ReadableBytes(totalSpeed))))
+	b.WriteString("\n")
+	b.WriteString(summaryStyle.Render(fmt.Sprintf("Total Downloaded: %s", utils.ReadableBytes(float64(totalDownloaded)))))
+
+	b.WriteString("\n\n")
+	b.WriteString(metaStyle.Render("Press q / Ctrl+C to quit."))
+	b.WriteString("\n")
 	return b.String()
-}
-
-func progressBar(downloaded uint64, total int64, width int) string {
-	if width <= 0 {
-		return "[]"
-	}
-
-	filled := 0
-	if total > 0 {
-		ratio := float64(downloaded) / float64(total)
-		if ratio > 1 {
-			ratio = 1
-		}
-		filled = int(ratio * float64(width))
-	}
-
-	if filled < 0 {
-		filled = 0
-	}
-	if filled > width {
-		filled = width
-	}
-
-	return "[" + strings.Repeat("=", filled) + strings.Repeat(" ", width-filled) + "]"
 }
 
 func StartTUI(target string, concurrent int, agg *Aggregator) error {
