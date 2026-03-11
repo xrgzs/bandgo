@@ -131,6 +131,9 @@ func StartWorker(wg *sync.WaitGroup, workerID int, cfg config.Config, agg *monit
 		}
 
 		if err != nil {
+			if agg != nil {
+				agg.ResetWorker(workerID)
+			}
 			continue
 		}
 
@@ -140,6 +143,9 @@ func StartWorker(wg *sync.WaitGroup, workerID int, cfg config.Config, agg *monit
 		// Execute request
 		resp, err := client.Do(req)
 		if err != nil {
+			if agg != nil {
+				agg.ResetWorker(workerID)
+			}
 			continue
 		}
 
@@ -168,5 +174,6 @@ func StartWorker(wg *sync.WaitGroup, workerID int, cfg config.Config, agg *monit
 			}
 		}
 		resp.Body.Close()
+		agg.ResetWorker(workerID)
 	}
 }

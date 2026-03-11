@@ -19,7 +19,8 @@ const progressBarWidth = 24
 
 type WorkerSnapshot struct {
 	ID            int
-	Downloaded    uint64
+	Current       uint64
+	Total         uint64
 	ContentLength int64
 	SpeedBps      float64
 }
@@ -27,6 +28,7 @@ type WorkerSnapshot struct {
 type Aggregator struct {
 	mu      sync.RWMutex
 	total   map[int]uint64
+	current map[int]uint64
 	window  map[int]uint64
 	length  map[int]int64
 	speed   map[int]float64
@@ -36,6 +38,7 @@ type Aggregator struct {
 func NewAggregator() *Aggregator {
 	return &Aggregator{
 		total:   make(map[int]uint64),
+		current: make(map[int]uint64),
 		window:  make(map[int]uint64),
 		length:  make(map[int]int64),
 		speed:   make(map[int]float64),
@@ -49,6 +52,7 @@ func (a *Aggregator) RegisterWorker(workerID int) {
 
 	if _, ok := a.total[workerID]; !ok {
 		a.total[workerID] = 0
+		a.current[workerID] = 0
 		a.window[workerID] = 0
 		a.length[workerID] = -1
 		a.speed[workerID] = 0
@@ -61,10 +65,31 @@ func (a *Aggregator) SetContentLength(workerID int, contentLength int64) {
 
 	if _, ok := a.total[workerID]; !ok {
 		a.total[workerID] = 0
+		a.current[workerID] = 0
 		a.window[workerID] = 0
 		a.speed[workerID] = 0
 	}
+	a.current[workerID] = 0
 	a.length[workerID] = contentLength
+}
+
+func (a *Aggregator) ResetWorker(workerID int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if _, ok := a.total[workerID]; !ok {
+		a.total[workerID] = 0
+		a.current[workerID] = 0
+		a.window[workerID] = 0
+		a.length[workerID] = -1
+		a.speed[workerID] = 0
+		return
+	}
+
+	a.current[workerID] = 0
+	a.window[workerID] = 0
+	a.speed[workerID] = 0
+	a.length[workerID] = -1
 }
 
 func (a *Aggregator) AddDownloaded(workerID int, n int) {
@@ -76,11 +101,13 @@ func (a *Aggregator) AddDownloaded(workerID int, n int) {
 
 	if _, ok := a.total[workerID]; !ok {
 		a.total[workerID] = 0
+		a.current[workerID] = 0
 		a.window[workerID] = 0
 		a.length[workerID] = -1
 		a.speed[workerID] = 0
 	}
 	a.total[workerID] += uint64(n)
+	a.current[workerID] += uint64(n)
 	a.window[workerID] += uint64(n)
 }
 
@@ -113,7 +140,8 @@ func (a *Aggregator) Snapshot() []WorkerSnapshot {
 	for id := range a.total {
 		workers = append(workers, WorkerSnapshot{
 			ID:            id,
-			Downloaded:    a.total[id],
+			Current:       a.current[id],
+			Total:         a.total[id],
 			ContentLength: a.length[id],
 			SpeedBps:      a.speed[id],
 		})
@@ -292,29 +320,27 @@ func (m tuiModel) View() string {
 		speed := fmt.Sprintf("%s/s", utils.ReadableBytes(w.SpeedBps))
 
 		if w.ContentLength > 0 {
-			fraction := float64(w.Downloaded) / float64(w.ContentLength)
+			fraction := float64(w.Current) / float64(w.ContentLength)
 			if fraction > 1 {
 				fraction = 1
 			}
-			pct := fmt.Sprintf("%5.1f%%", fraction*100)
 			bar := m.progress.ViewAs(fraction)
-			b.WriteString(fmt.Sprintf("%s | %s %s %s (%s/%s)\n",
+			b.WriteString(fmt.Sprintf("%s: %s | %s | %s/%s\n",
 				idLabel,
 				bar,
-				pct,
 				speed,
-				utils.ReadableBytes(float64(w.Downloaded)),
+				utils.ReadableBytes(float64(w.Current)),
 				utils.ReadableBytes(float64(w.ContentLength)),
 			))
 			continue
 		}
 
-		// Unknown content-length: use spinner to show this worker is actively downloading.
-		b.WriteString(fmt.Sprintf("%s | %s %s %s downloaded\n",
+		// Unknown content-length: show independent worker total and mark request as streaming.
+		b.WriteString(fmt.Sprintf("%s: %s streaming | %s | %s\n",
 			idLabel,
 			m.spinner.View(),
 			speed,
-			utils.ReadableBytes(float64(w.Downloaded)),
+			utils.ReadableBytes(float64(w.Current)),
 		))
 	}
 
