@@ -37,6 +37,7 @@ func main() {
 		go func() {
 			if err := monitor.StartTUI(cfg.URL, workers, agg); err != nil {
 				log.Printf("tui exited with error: %v", err)
+				os.Exit(1)
 			}
 			os.Exit(0)
 		}()
