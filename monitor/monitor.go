@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -16,6 +17,8 @@ import (
 )
 
 const progressBarWidth = 24
+
+var ErrNilAggregator = errors.New("monitor: nil aggregator")
 
 type WorkerSnapshot struct {
 	ID            int
@@ -173,7 +176,11 @@ type tuiModel struct {
 	spinner    spinner.Model
 }
 
-func NewTUIModel(target string, concurrent int, agg *Aggregator) tea.Model {
+func NewTUIModel(target string, concurrent int, agg *Aggregator) (tea.Model, error) {
+	if agg == nil {
+		return nil, ErrNilAggregator
+	}
+
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
 
@@ -183,7 +190,7 @@ func NewTUIModel(target string, concurrent int, agg *Aggregator) tea.Model {
 		concurrent: concurrent,
 		progress:   progress.New(progress.WithDefaultGradient(), progress.WithWidth(progressBarWidth)),
 		spinner:    sp,
-	}
+	}, nil
 }
 
 func (m tuiModel) Init() tea.Cmd {
@@ -346,7 +353,12 @@ func (m tuiModel) View() string {
 }
 
 func StartTUI(target string, concurrent int, agg *Aggregator) error {
-	p := tea.NewProgram(NewTUIModel(target, concurrent, agg), tea.WithAltScreen())
-	_, err := p.Run()
+	model, err := NewTUIModel(target, concurrent, agg)
+	if err != nil {
+		return err
+	}
+
+	p := tea.NewProgram(model, tea.WithAltScreen())
+	_, err = p.Run()
 	return err
 }
