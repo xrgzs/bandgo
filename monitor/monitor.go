@@ -46,29 +46,30 @@ func NewAggregator() *Aggregator {
 	}
 }
 
+func (a *Aggregator) ensureWorkerLocked(workerID int) {
+	if _, ok := a.total[workerID]; ok {
+		return
+	}
+
+	a.total[workerID] = 0
+	a.current[workerID] = 0
+	a.window[workerID] = 0
+	a.length[workerID] = -1
+	a.speed[workerID] = 0
+}
+
 func (a *Aggregator) RegisterWorker(workerID int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if _, ok := a.total[workerID]; !ok {
-		a.total[workerID] = 0
-		a.current[workerID] = 0
-		a.window[workerID] = 0
-		a.length[workerID] = -1
-		a.speed[workerID] = 0
-	}
+	a.ensureWorkerLocked(workerID)
 }
 
 func (a *Aggregator) SetContentLength(workerID int, contentLength int64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if _, ok := a.total[workerID]; !ok {
-		a.total[workerID] = 0
-		a.current[workerID] = 0
-		a.window[workerID] = 0
-		a.speed[workerID] = 0
-	}
+	a.ensureWorkerLocked(workerID)
 	a.current[workerID] = 0
 	a.length[workerID] = contentLength
 }
@@ -77,14 +78,7 @@ func (a *Aggregator) ResetWorker(workerID int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if _, ok := a.total[workerID]; !ok {
-		a.total[workerID] = 0
-		a.current[workerID] = 0
-		a.window[workerID] = 0
-		a.length[workerID] = -1
-		a.speed[workerID] = 0
-		return
-	}
+	a.ensureWorkerLocked(workerID)
 
 	a.current[workerID] = 0
 	a.window[workerID] = 0
@@ -99,13 +93,7 @@ func (a *Aggregator) AddDownloaded(workerID int, n int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if _, ok := a.total[workerID]; !ok {
-		a.total[workerID] = 0
-		a.current[workerID] = 0
-		a.window[workerID] = 0
-		a.length[workerID] = -1
-		a.speed[workerID] = 0
-	}
+	a.ensureWorkerLocked(workerID)
 	a.total[workerID] += uint64(n)
 	a.current[workerID] += uint64(n)
 	a.window[workerID] += uint64(n)
