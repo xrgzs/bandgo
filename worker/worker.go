@@ -129,6 +129,8 @@ func runWorker(workerID int, cfg config.Config, agg *monitor.Aggregator) {
 		agg.RegisterWorker(workerID)
 	}
 
+	buf := make([]byte, 32*1024)
+
 	transport := createTransport(cfg.CustomIP)
 	client := &http.Client{
 		Transport: transport,
@@ -177,7 +179,6 @@ func runWorker(workerID int, cfg config.Config, agg *monitor.Aggregator) {
 			continue
 		}
 
-		buf := make([]byte, 32*1024)
 		for {
 			n, readErr := resp.Body.Read(buf)
 			if n > 0 {
