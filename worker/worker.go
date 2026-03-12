@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"bandgo/config"
+	"bandgo/monitor"
 	"bandgo/utils"
 
 	rand_ua "github.com/xrgzs/rand-ua-go"
@@ -96,16 +97,39 @@ func createTransport(customIP config.IPArray) *http.Transport {
 	return transport
 }
 
-// StartWorker starts a worker that performs HTTP requests
-func StartWorker(wg *sync.WaitGroup, cfg config.Config) {
+// StartWorker starts a worker that performs HTTP requests.
+// It supervises panic recovery in the same goroutine so WaitGroup ownership
+// stays with the caller that launched the worker.
+func StartWorker(wg *sync.WaitGroup, workerID int, cfg config.Config, agg *monitor.Aggregator) {
 	defer wg.Done()
-	defer func() {
-		if r := recover(); r != nil {
-			// Restart worker on panic
-			wg.Add(1)
-			go StartWorker(wg, cfg)
+
+	for {
+		restart := false
+
+		func() {
+			defer func() {
+				if recover() != nil {
+					restart = true
+				}
+			}()
+
+			runWorker(workerID, cfg, agg)
+		}()
+
+		if !restart {
+			return
 		}
-	}()
+
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func runWorker(workerID int, cfg config.Config, agg *monitor.Aggregator) {
+	if agg != nil {
+		agg.RegisterWorker(workerID)
+	}
+
+	buf := make([]byte, 32*1024)
 
 	transport := createTransport(cfg.CustomIP)
 	client := &http.Client{
@@ -126,6 +150,9 @@ func StartWorker(wg *sync.WaitGroup, cfg config.Config) {
 		}
 
 		if err != nil {
+			if agg != nil {
+				agg.ResetWorker(workerID)
+			}
 			continue
 		}
 
@@ -135,11 +162,36 @@ func StartWorker(wg *sync.WaitGroup, cfg config.Config) {
 		// Execute request
 		resp, err := client.Do(req)
 		if err != nil {
+			if agg != nil {
+				agg.ResetWorker(workerID)
+			}
 			continue
 		}
 
-		// Discard response body and close
-		io.Copy(io.Discard, resp.Body)
+		if agg != nil {
+			agg.SetContentLength(workerID, resp.ContentLength)
+		}
+
+		if agg == nil {
+			// Fast path for no-TUI mode: no aggregation, discard directly.
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			continue
+		}
+
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				agg.AddDownloaded(workerID, n)
+			}
+			if readErr != nil {
+				if readErr == io.EOF {
+					break
+				}
+				break
+			}
+		}
 		resp.Body.Close()
+		agg.ResetWorker(workerID)
 	}
 }

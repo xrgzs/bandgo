@@ -27,6 +27,7 @@ type Config struct {
 	CustomIP    IPArray
 	Headers     HeadersList
 	Concurrent  int
+	NoTUI       bool
 }
 
 // Flag methods
@@ -88,6 +89,7 @@ func ParseArgs() Config {
 		postContent string
 		referer     string
 		xforwardfor bool
+		noTUI       bool
 		customIP    IPArray
 		headers     HeadersList
 	)
@@ -100,6 +102,7 @@ func ParseArgs() Config {
 	flag.BoolVar(&xforwardfor, "f", true, "randomize X-Forwarded-For and X-Real-IP address")
 	flag.Var(&customIP, "i", "custom IP address for domain, multiple addresses will be assigned randomly")
 	flag.Var(&headers, "H", "custom header in format 'Key:Value'")
+	flag.BoolVar(&noTUI, "q", false, "disable TUI and worker traffic aggregation to reduce overhead")
 
 	flag.Usage = PrintUsage
 	flag.Parse()
@@ -123,5 +126,6 @@ func ParseArgs() Config {
 		CustomIP:    customIP,
 		Headers:     headers,
 		Concurrent:  concurrent,
+		NoTUI:       noTUI,
 	}
 }
