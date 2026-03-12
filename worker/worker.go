@@ -97,17 +97,34 @@ func createTransport(customIP config.IPArray) *http.Transport {
 	return transport
 }
 
-// StartWorker starts a worker that performs HTTP requests
+// StartWorker starts a worker that performs HTTP requests.
+// It supervises panic recovery in the same goroutine so WaitGroup ownership
+// stays with the caller that launched the worker.
 func StartWorker(wg *sync.WaitGroup, workerID int, cfg config.Config, agg *monitor.Aggregator) {
 	defer wg.Done()
-	defer func() {
-		if r := recover(); r != nil {
-			// Restart worker on panic
-			wg.Add(1)
-			go StartWorker(wg, workerID, cfg, agg)
-		}
-	}()
 
+	for {
+		restart := false
+
+		func() {
+			defer func() {
+				if recover() != nil {
+					restart = true
+				}
+			}()
+
+			runWorker(workerID, cfg, agg)
+		}()
+
+		if !restart {
+			return
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func runWorker(workerID int, cfg config.Config, agg *monitor.Aggregator) {
 	if agg != nil {
 		agg.RegisterWorker(workerID)
 	}
