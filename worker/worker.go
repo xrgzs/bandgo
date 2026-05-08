@@ -82,16 +82,19 @@ func createTransport(customIP config.IPArray) *http.Transport {
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			ip := customIP[r.Intn(len(customIP))]
 
-			hostPort := ":80"
-			if strings.HasPrefix(addr, "https") {
-				hostPort = ":443"
+			// Normalize: strip brackets from IPv6 input like "[::1]"
+			ip = strings.TrimPrefix(ip, "[")
+			ip = strings.TrimSuffix(ip, "]")
+
+			_, port, err := net.SplitHostPort(addr)
+			if err != nil || port == "" {
+				port = "80"
 			}
 
-			return dialer.DialContext(ctx, network, ip+hostPort)
+			return dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
 		}
 
 		transport.DialContext = dialFunc
-		transport.DialTLSContext = dialFunc
 	}
 
 	return transport
