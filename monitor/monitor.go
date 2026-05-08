@@ -84,6 +84,8 @@ func (a *Aggregator) ResetWorker(workerID int) {
 	a.ensureWorkerLocked(workerID)
 
 	a.current[workerID] = 0
+	a.window[workerID] = 0
+	a.speed[workerID] = 0
 	a.length[workerID] = -1
 }
 
