@@ -68,7 +68,9 @@ func processHeaders(req *http.Request, cfg config.Config) {
 // createTransport creates an HTTP transport with custom IP support
 func createTransport(customIP config.IPArray) *http.Transport {
 	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+		ResponseHeaderTimeout: 15 * time.Second, // Only limit header wait time, not download time
+		TLSHandshakeTimeout:   10 * time.Second,
 	}
 
 	// If custom IPs are provided, configure dialers
@@ -137,7 +139,6 @@ func runWorker(workerID int, cfg config.Config, agg *monitor.Aggregator) {
 	transport := createTransport(cfg.CustomIP)
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   10 * time.Second,
 	}
 
 	// Loop
